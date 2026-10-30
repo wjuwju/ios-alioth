@@ -1,5 +1,9 @@
 # HackiOS on Redmi K40 (alioth) — 启动全流程交付包
 
+
+> 本 fork 以此项目为主线，复用其启动和镜像构建。已有 UniXNU 工作按固定版本合并为可选参考，见 [整合说明](docs/UNIXNU-INTEGRATION.md)。
+> 新增 `boot-one.ps1 -CheckOnly` 离线检查；完整启动缺少 `system.apfs` 时会报告缺项，仅内核调试需显式指定 `-NoSystem`。
+
 把 Apple 开源的 **XNU 内核（iOS 16.5 / `xnu-8796.121.2`）** 跑在 **Redmi K40 / POCO F3（alioth，骁龙 870 / SM8250）** 上，
 上面跑**未修改的 iOS 16.5 用户态**。启动链：
 
@@ -7,7 +11,7 @@
 fastboot boot → Mu-Silicium UEFI → xnuloader (EFI 应用) → XNU → launchd → backboardd → SpringBoard
 ```
 
-**全程只写 RAM**（`fastboot boot` / `fastboot stage`），不写任何分区；重启即回到原来的 Android / HyperOS。
+启动镜像通过 `fastboot boot` / `fastboot stage` 加载到 RAM，不刷写 Android 系统或 userdata；重启可回到原来的 Android / HyperOS。
 唯一的写操作是 loader 在内核返回时写小米的 `logdump` 分区（崩溃日志分区，不影响启动）。
 
 - 打包日期：2026-10-23
@@ -352,7 +356,7 @@ GitHub 仓库不含 `firmware/` 与 `boot/system.apfs`（见 §3.1 / §7），�
   仅供本人设备研究使用，**不要公开再分发 / 上传到公开仓库**。上游仓库刻意不含任何 Apple 文件，本包为"可启动交付"才附带。
 - `firmware/` 里的完整 IPSW 同样是 **Apple 的固件，版权归 Apple**，不在开源许可范围内，**不可公开再分发**；
   它只作为本机重建 `system.apfs` 的输入。
-- 本包不是 ROM：不刷机、不写分区，重启回原系统。使用风险自负（解锁 bootloader 本身有风险）。
+- 本包使用 RAM 加载；loader 在内核返回时会写 logdump 日志分区，不能视为绝对不写存储。重启可回到原系统。
 
 ---
 
