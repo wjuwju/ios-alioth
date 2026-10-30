@@ -1,0 +1,4 @@
+[submodule "external/UniXNU-alioth"]
+	path = external/UniXNU-alioth
+	url = https://github.com/wjuwju/UniXNU-alioth.git
+	branch = repro/wsl-linux

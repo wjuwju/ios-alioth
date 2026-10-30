@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "primary": {
+    "repository": "https://github.com/MrMoxing/ios-alioth",
+    "revision": "2f9207ca27f9b0fad480702e587b88dcc7271ec9",
+    "os": "iOS 16.5 20F66",
+    "xnu": "8796.121.2",
+    "boot_entry": "boot-one.ps1",
+    "userland_builder": "src/hackios-xnu-userland-main/userland/build.sh"
+  },
+  "optional_reference": {
+    "path": "external/UniXNU-alioth",
+    "repository": "https://github.com/wjuwju/UniXNU-alioth",
+    "revision": "90daa8a68a7814b52a51eb93e79476189b2eb8d8",
+    "os": "iPadOS 17.7.11 21H461",
+    "xnu": "10063.141.1",
+    "used_by_default_boot": false
+  },
+  "related_sources": [
+    {
+      "repository": "https://github.com/FFT-infra/UniXNU",
+      "revision": "af691c85a5c4d428ffbfa165eb6c4daf9291d4f2"
+    },
+    {
+      "repository": "https://github.com/FFT-infra/uefi-alioth",
+      "revision": "20c7c585af3d652e2417ee4f1a5e7554f6cd930c"
+    },
+    {
+      "repository": "https://github.com/FFT-infra/Adreno650",
+      "revision": "bdee54c393c938455c9c8626946fa5c376ea3d45"
+    }
+  ],
+  "policy": "Reuse ios-alioth boot and image builders. UniXNU is an optional pinned reference. ABI-specific kernels, loaders, trust caches and boot images are not interchangeable."
+}

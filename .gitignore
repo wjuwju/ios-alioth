@@ -12,3 +12,7 @@ boot/system.apfs
 .DS_Store
 Thumbs.db
 *.swp
+
+# Local integration state and generated build tree
+.build/
+integration/local.json

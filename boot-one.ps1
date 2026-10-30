@@ -1,13 +1,14 @@
 ﻿<#
 .SYNOPSIS
   一键在 Redmi K40 / POCO F3 (alioth) 上临时启动 HackiOS（iOS 16.5 用户态）。
-  全程只写 RAM：fastboot boot + fastboot stage，不写任何分区；重启即回到原 Android/HyperOS。
+  通过 fastboot boot + fastboot stage 临时启动；内核返回时 loader 可能写 logdump 日志分区。
 
 .DESCRIPTION
   和同目录的 boot-one.sh 等价，纯 Windows PowerShell 实现（截图用 .NET 转 PNG，不需要 Python）。
   本包 boot/ 里已含 UEFI、loader、内核载荷、iOS 系统卷和 GPU 固件（在 root.apfs 内），
   因此启动不需要下载任何固件；只有从零重建 system.apfs 时才需要 Apple IPSW，见 README §5.4。
-  若 boot/system.apfs 缺失，脚本会自动降级为“只启动内核”，并提示重建方法。
+  完整启动需要 boot/system.apfs；仅调试内核时显式指定 -NoSystem。
+  -CheckOnly 只检查本地文件和工具，不下载、不连接或重启手机。
 
 .PARAMETER Secs
   oem run 之后等多少秒再截图，默认 45（主屏约在内核启动后 20 秒出现）。
@@ -26,6 +27,15 @@
 
 .PARAMETER SkipFirmware
   跳过启动前的固件检查/补全。固件只在重建 system.apfs 时才需要，临时启动不用它。
+
+.PARAMETER CheckOnly
+  只验证本地镜像、校验清单和工具路径；不下载，也不调用 ADB/Fastboot。
+
+.PARAMETER AdbPath
+  复用指定位置的 adb.exe；省略时沿用现有自动查找。
+
+.PARAMETER FastbootPath
+  复用指定位置的 fastboot.exe；省略时沿用现有自动查找。
 
 .PARAMETER Reboot
   跑完回到 Android。默认不回安卓：脚本拷完日志/截图后，手机继续留在 iOS 里运行。
@@ -52,7 +62,10 @@ param(
     [string]$OutDir = "",
     [switch]$NoSystem,
     [switch]$SkipFirmware,
-    [switch]$Reboot
+    [switch]$Reboot,
+    [switch]$CheckOnly,
+    [string]$AdbPath = "",
+    [string]$FastbootPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -75,7 +88,11 @@ function Resolve-Input([string]$Name) {
     return (Join-Path $BootDir $Name)
 }
 
-function Find-Tool([string]$Name) {
+function Find-Tool([string]$Name, [string]$PreferredPath = "") {
+    if ($PreferredPath) {
+        if (-not (Test-Path -LiteralPath $PreferredPath -PathType Leaf)) { throw "工具不存在：$PreferredPath" }
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
     $candidates = @(
@@ -149,8 +166,8 @@ function Convert-RawToPng {
     $bmp.Dispose()
 }
 
-$Adb = Find-Tool "adb"
-$Fastboot = Find-Tool "fastboot"
+$Adb = Find-Tool "adb" $AdbPath
+$Fastboot = Find-Tool "fastboot" $FastbootPath
 
 $ImagePath = Resolve-Input $Image
 $PayloadPath = Resolve-Input $Payload
@@ -161,16 +178,40 @@ if (-not (Test-Path -LiteralPath $ImagePath)) { throw "缺少 loader 镜像：$I
 if (-not (Test-Path -LiteralPath $PayloadPath)) { throw "缺少载荷：$PayloadPath" }
 $UseSystem = -not $NoSystem
 if ($UseSystem -and -not (Test-Path -LiteralPath $SystemPath)) {
-    Write-Host "system 镜像不存在：$SystemPath" -ForegroundColor Yellow
-    Write-Host "改为只启动内核（载荷自带 root.apfs 当根）。" -ForegroundColor Yellow
-    Write-Host "要完整 iOS 桌面，请恢复 boot/system.apfs，或用" -ForegroundColor Yellow
-    Write-Host "  src\hackios-xnu-userland-main\ios165\fetch.sh + userland\build.sh 从 IPSW 重建。" -ForegroundColor Yellow
-    $UseSystem = $false
+    throw "缺少完整 iOS 启动需要的系统卷：$SystemPath。请按 README 5.4 构建；仅调试内核时显式使用 -NoSystem。"
 }
 if ($UseSystem) {
     Write-Host "镜像：$([IO.Path]::GetFileName($ImagePath)), $([IO.Path]::GetFileName($PayloadPath)), $([IO.Path]::GetFileName($SystemPath)) —— 无需下载任何固件"
 } else {
     Write-Host "镜像：$([IO.Path]::GetFileName($ImagePath)), $([IO.Path]::GetFileName($PayloadPath)) —— 仅内核（不 stage 系统卷）"
+}
+
+# This return precedes firmware fetching and every ADB/fastboot invocation.
+if ($CheckOnly) {
+    $verified = 0
+    foreach ($line in Get-Content -LiteralPath (Join-Path $Root "SHA256SUMS.txt")) {
+        if ($line -notmatch '^([0-9a-fA-F]{64})\s+(.+)$') { continue }
+        $expected = $Matches[1]
+        $relative = $Matches[2].Trim()
+        $file = Join-Path $Root $relative
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "校验清单中的文件缺失：$relative" }
+        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine $expected) {
+            throw "SHA-256 不一致：$relative"
+        }
+        $verified++
+    }
+    if (-not $verified) { throw "SHA256SUMS.txt 没有可验证的条目" }
+    [pscustomobject]@{
+        Mode = $(if ($UseSystem) { "ios-desktop" } else { "kernel-only" })
+        VerifiedFiles = $verified
+        Image = $ImagePath
+        Payload = $PayloadPath
+        SystemImage = $(if ($UseSystem) { $SystemPath } else { $null })
+        Adb = $Adb
+        Fastboot = $Fastboot
+        DeviceActionsPerformed = $false
+    } | ConvertTo-Json
+    return
 }
 
 Say "firmware（重建系统卷的原料，临时启动不需要）"

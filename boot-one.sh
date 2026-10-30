@@ -48,11 +48,9 @@ say "what this package needs (and does not)"
 [ -f "$IMG" ] || { echo "boot-one: missing loader image: $IMG" >&2; exit 1; }
 [ -f "$PAYLOAD" ] || { echo "boot-one: missing payload: $PAYLOAD" >&2; exit 1; }
 if [ -n "$SYS" ] && [ ! -f "$SYS" ]; then
-	echo "boot-one: system image not found: $SYS"
-	echo "boot-one: booting the kernel only (the payload's own root.apfs is the root)."
-	echo "boot-one: for the full iOS desktop, restore boot/system.apfs or rebuild it from an IPSW"
-	echo "          with src/hackios-xnu-userland-main/ios165/fetch.sh + userland/build.sh."
-	SYS=
+    echo "boot-one: missing system image: $SYS" >&2
+    echo "Build it as README 5.4 describes; use SYS= explicitly for kernel-only debugging." >&2
+    exit 1
 fi
 if [ -n "$SYS" ]; then
 	echo "images: $(basename "$IMG"), $(basename "$PAYLOAD"), $(basename "$SYS") -- no firmware download needed"
